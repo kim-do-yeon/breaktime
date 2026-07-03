@@ -5,15 +5,19 @@ import { useMemo, useState } from "react";
 import type { Plan, Suggestion, User } from "@/lib/types";
 import { getHolidaysForYear, coverageRange } from "@/lib/holidays/korea";
 import { generateCandidates } from "@/lib/candidates";
-import { rankWindows } from "@/lib/rank";
+import { rankAllWindows } from "@/lib/rank";
 import { totalDays } from "@/lib/format";
 import { usePlannerStorage } from "@/hooks/usePlannerStorage";
 import { usePlans } from "@/hooks/usePlans";
 import { PlannerForm } from "@/components/PlannerForm";
-import { SuggestionList, suggestionKey } from "@/components/SuggestionList";
+import { SuggestionList } from "@/components/SuggestionList";
 import { EmptyState } from "@/components/EmptyState";
 import { SeasonGuide } from "@/components/SeasonGuide";
 import { MyCalendar } from "@/components/MyCalendar";
+import { YearCalendar } from "@/components/YearCalendar";
+import { PlannerSummary } from "@/components/PlannerSummary";
+
+const PAGE_SIZE = 5;
 
 type ResultState =
   | { kind: "idle" }
@@ -34,7 +38,7 @@ function computeResult(user: User): ResultState {
   if (candidates.length === 0) {
     return { kind: "empty-all-blackout" };
   }
-  const suggestions = rankWindows(candidates);
+  const suggestions = rankAllWindows(candidates);
   if (suggestions.length === 0) {
     return { kind: "empty-all-blackout" };
   }
@@ -49,11 +53,14 @@ export default function Home() {
   // Snapshot of the year the current results were computed for.
   const [activeUser, setActiveUser] = useState<User | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
+  // How many recommendations are currently shown (grows via "load more").
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   function handleSubmit(submitted: User) {
     setResult(computeResult(submitted));
     setActiveUser(submitted);
     setWarning(null);
+    setVisibleCount(PAGE_SIZE);
   }
 
   const activeYear = activeUser?.year ?? user.year;
@@ -73,6 +80,10 @@ export default function Home() {
     () => new Set(plans.map((p) => `${p.start}|${p.end}`)),
     [plans]
   );
+
+  const allSuggestions = result.kind === "ok" ? result.suggestions : [];
+  const visibleSuggestions = allSuggestions.slice(0, visibleCount);
+  const hasMore = visibleCount < allSuggestions.length;
 
   function handleAdd(s: Suggestion) {
     const plan: Plan = {
@@ -151,13 +162,44 @@ export default function Home() {
             />
           )}
           {result.kind === "ok" && (
-            <SuggestionList
-              suggestions={result.suggestions}
-              year={activeYear}
-              holidays={activeHolidays}
-              addedKeys={addedKeys}
-              onAdd={handleAdd}
-            />
+            <div className="space-y-4">
+              {/* Calendar first: year overview with recommendations + seasons */}
+              <YearCalendar
+                year={activeYear}
+                holidays={activeHolidays}
+                suggestions={visibleSuggestions}
+                plans={yearPlans}
+              />
+
+              <PlannerSummary
+                suggestions={allSuggestions}
+                holidays={activeHolidays}
+              />
+
+              <SuggestionList
+                suggestions={visibleSuggestions}
+                year={activeYear}
+                holidays={activeHolidays}
+                addedKeys={addedKeys}
+                onAdd={handleAdd}
+              />
+
+              {/* Load more / no-more-to-show state */}
+              {hasMore ? (
+                <button
+                  type="button"
+                  onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
+                  className="w-full rounded-xl border border-indigo-200 bg-white px-4 py-3 text-sm font-semibold text-indigo-600 transition hover:bg-indigo-50"
+                >
+                  추천 더 보기 ({allSuggestions.length - visibleCount}개 남음)
+                </button>
+              ) : (
+                <p className="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-4 text-center text-xs text-gray-500">
+                  더 이상 추천할 새로운 휴가 조합이 없어요. 남은 후보는 이미 보신 추천과
+                  비슷한 조합이라 여기까지가 최선이에요. 🙌
+                </p>
+              )}
+            </div>
           )}
           {result.kind === "empty-no-pto" && (
             <EmptyState

@@ -15,6 +15,10 @@ import { scoreWindow, type ScoredWindow } from "@/lib/score";
 
 const TOP_N = 5;
 const DEDUP_OVERLAP_THRESHOLD = 3; // calendar days
+/** For "load more": only surface windows scoring ≥ this (0–100 relative). */
+const QUALITY_FLOOR = 40;
+/** Hard cap on how many distinct windows we ever surface. */
+const MAX_SUGGESTIONS = 24;
 
 /**
  * Count overlapping calendar days between two windows.
@@ -70,12 +74,10 @@ function dedup(scored: ScoredWindow[]): ScoredWindow[] {
 }
 
 /**
- * Rank vacation window candidates and return top-5 suggestions.
- *
- * @param candidates  - all valid candidate windows (from generateCandidates)
- * @returns           - up to 5 ranked Suggestion objects, scores normalized 0–100
+ * Score, dedup, and sort all candidates into normalized suggestions.
+ * Scores are normalized 0–100 against the highest-scoring window.
  */
-export function rankWindows(candidates: VacationWindow[]): Suggestion[] {
+function rankInternal(candidates: VacationWindow[]): Suggestion[] {
   if (candidates.length === 0) return [];
 
   // Find max leverage for normalization
@@ -86,25 +88,47 @@ export function rankWindows(candidates: VacationWindow[]): Suggestion[] {
     scoreWindow(c, maxLeverage)
   );
 
-  // Dedup (overlapping ≥3 days → keep higher score)
+  // Dedup (overlapping ≥3 days → keep higher score), then sort explicitly
   const deduplicated = dedup(scored);
-
-  // Sort again after dedup (dedup returns in sorted order, but be explicit)
   deduplicated.sort(compareScored);
 
-  // Take top N
-  const top = deduplicated.slice(0, TOP_N);
+  if (deduplicated.length === 0) return [];
 
-  if (top.length === 0) return [];
+  // Normalize scores to 0–100 against the top window
+  const maxRaw = deduplicated[0].rawScore;
 
-  // Normalize scores to 0–100
-  const maxRaw = top[0].rawScore; // already sorted descending
-
-  return top.map((s) => ({
+  return deduplicated.map((s) => ({
     window: s.window,
     rawScore: s.rawScore,
     score: maxRaw > 0 ? Math.round((100 * s.rawScore) / maxRaw) : 0,
     factors: s.factors,
     breakdown: s.breakdown,
   }));
+}
+
+/**
+ * Rank vacation window candidates and return top-5 suggestions.
+ *
+ * @param candidates  - all valid candidate windows (from generateCandidates)
+ * @returns           - up to 5 ranked Suggestion objects, scores normalized 0–100
+ */
+export function rankWindows(candidates: VacationWindow[]): Suggestion[] {
+  return rankInternal(candidates).slice(0, TOP_N);
+}
+
+/**
+ * Rank candidates for progressive "load more" display: all deduped windows
+ * that clear the quality floor, capped at MAX_SUGGESTIONS. Always returns at
+ * least the top window so a result is never empty when candidates exist.
+ *
+ * @param candidates  - all valid candidate windows
+ * @returns           - ranked Suggestions worth surfacing, scores 0–100
+ */
+export function rankAllWindows(candidates: VacationWindow[]): Suggestion[] {
+  const all = rankInternal(candidates);
+  if (all.length === 0) return [];
+  const worthShowing = all.filter((s) => s.score >= QUALITY_FLOOR);
+  // Guarantee at least the single best window even if it's below the floor.
+  const kept = worthShowing.length > 0 ? worthShowing : all.slice(0, 1);
+  return kept.slice(0, MAX_SUGGESTIONS);
 }
