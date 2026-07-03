@@ -12,9 +12,9 @@ export function formatKoreanDate(iso: string): string {
   return `${month}월 ${day}일 (${weekday})`;
 }
 
-/** Format a window's date range as "9월 24일 (목) ~ 9월 30일 (수)". */
-export function formatRange(w: VacationWindow): string {
-  return `${formatKoreanDate(w.start)} ~ ${formatKoreanDate(w.end)}`;
+/** Format a date range as "9월 24일 (목) ~ 9월 30일 (수)". */
+export function formatRange(range: { start: string; end: string }): string {
+  return `${formatKoreanDate(range.start)} ~ ${formatKoreanDate(range.end)}`;
 }
 
 /** Total number of days in the window (inclusive). */

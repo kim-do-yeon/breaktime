@@ -1,12 +1,28 @@
 // Renders the ranked list of vacation suggestions.
-import type { Suggestion } from "@/lib/types";
+import type { Holiday, Suggestion } from "@/lib/types";
 import { SuggestionCard } from "@/components/SuggestionCard";
 
 interface SuggestionListProps {
   suggestions: Suggestion[];
+  year: number;
+  holidays: Holiday[];
+  /** Keys ("start|end") of suggestions already added to my calendar. */
+  addedKeys: Set<string>;
+  onAdd: (suggestion: Suggestion) => void;
 }
 
-export function SuggestionList({ suggestions }: SuggestionListProps) {
+/** Stable identity for a suggestion window. */
+export function suggestionKey(s: Suggestion): string {
+  return `${s.window.start}|${s.window.end}`;
+}
+
+export function SuggestionList({
+  suggestions,
+  year,
+  holidays,
+  addedKeys,
+  onAdd,
+}: SuggestionListProps) {
   return (
     <div className="space-y-3">
       <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
@@ -14,9 +30,13 @@ export function SuggestionList({ suggestions }: SuggestionListProps) {
       </h2>
       {suggestions.map((s, i) => (
         <SuggestionCard
-          key={`${s.window.start}-${s.window.end}`}
+          key={suggestionKey(s)}
           suggestion={s}
           rank={i + 1}
+          year={year}
+          holidays={holidays}
+          isAdded={addedKeys.has(suggestionKey(s))}
+          onAdd={onAdd}
         />
       ))}
     </div>

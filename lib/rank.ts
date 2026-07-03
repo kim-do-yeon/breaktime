@@ -105,5 +105,6 @@ export function rankWindows(candidates: VacationWindow[]): Suggestion[] {
     rawScore: s.rawScore,
     score: maxRaw > 0 ? Math.round((100 * s.rawScore) / maxRaw) : 0,
     factors: s.factors,
+    breakdown: s.breakdown,
   }));
 }

@@ -9,15 +9,16 @@
  * holiday_bonus: min(holidays_in_window / 3, 1)
  */
 
-import type { VacationWindow, Factor } from "@/lib/types";
+import type { VacationWindow, Factor, ScoreBreakdown } from "@/lib/types";
 import { getSeasonWeight } from "@/data/seasonality-kr";
-import { computeRawScore } from "@/lib/scoring/weights";
+import { computeRawScore, WEIGHTS } from "@/lib/scoring/weights";
 import { getMonth } from "@/lib/candidates";
 
 export interface ScoredWindow {
   window: VacationWindow;
   rawScore: number;
   factors: Factor[];
+  breakdown: ScoreBreakdown;
 }
 
 /**
@@ -95,5 +96,22 @@ export function scoreWindow(
     },
   ];
 
-  return { window, rawScore, factors };
+  const breakdown: ScoreBreakdown = {
+    leverageNorm,
+    seasonWeight,
+    dominantMonth,
+    holidayBonus,
+    weighted: {
+      leverage: WEIGHTS.leverage * leverageNorm,
+      season: WEIGHTS.season * seasonWeight,
+      holiday: WEIGHTS.holiday_bonus * holidayBonus,
+    },
+    weights: {
+      leverage: WEIGHTS.leverage,
+      season: WEIGHTS.season,
+      holiday: WEIGHTS.holiday_bonus,
+    },
+  };
+
+  return { window, rawScore, factors, breakdown };
 }

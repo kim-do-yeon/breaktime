@@ -72,6 +72,22 @@ export interface VacationWindow {
   holidays: Holiday[];
 }
 
+/** Detailed score math for the "how was this calculated" explanation */
+export interface ScoreBreakdown {
+  /** leverage / maxLeverage, capped at 1 */
+  leverageNorm: number;
+  /** off-season weight of the window's dominant month (0..1) */
+  seasonWeight: number;
+  /** dominant month (1-indexed) used for the season weight */
+  dominantMonth: number;
+  /** holiday density bonus (0..1) */
+  holidayBonus: number;
+  /** weighted contribution of each term to rawScore */
+  weighted: { leverage: number; season: number; holiday: number };
+  /** the weight constants used (for displaying the formula) */
+  weights: { leverage: number; season: number; holiday: number };
+}
+
 /** A ranked vacation suggestion with score and factors */
 export interface Suggestion {
   window: VacationWindow;
@@ -81,4 +97,18 @@ export interface Suggestion {
   score: number;
   /** Factor breakdown for display */
   factors: Factor[];
+  /** Detailed score math for the explanation panel */
+  breakdown: ScoreBreakdown;
+}
+
+/** A vacation the user has added to their personal calendar. */
+export interface Plan {
+  /** ISO date YYYY-MM-DD — first day */
+  start: ISODateString;
+  /** ISO date YYYY-MM-DD — last day */
+  end: ISODateString;
+  /** PTO days this plan consumes */
+  ptoDays: number;
+  /** Total rest days (inclusive length) */
+  totalDays: number;
 }

@@ -2,17 +2,24 @@
 "use client";
 
 import { useState } from "react";
-import type { Suggestion } from "@/lib/types";
+import type { Holiday, Suggestion } from "@/lib/types";
 import {
   formatRange,
   totalDays,
   suggestionToText,
   suggestionToIcs,
 } from "@/lib/format";
+import { monthsInRange } from "@/lib/calendar";
+import { MiniCalendar, CalendarLegend } from "@/components/MiniCalendar";
+import { ScoreExplain } from "@/components/ScoreExplain";
 
 interface SuggestionCardProps {
   suggestion: Suggestion;
   rank: number;
+  year: number;
+  holidays: Holiday[];
+  isAdded: boolean;
+  onAdd: (suggestion: Suggestion) => void;
 }
 
 const FACTOR_STYLES: Record<string, string> = {
@@ -21,9 +28,18 @@ const FACTOR_STYLES: Record<string, string> = {
   bridge_days: "bg-amber-100 text-amber-700",
 };
 
-export function SuggestionCard({ suggestion, rank }: SuggestionCardProps) {
+export function SuggestionCard({
+  suggestion,
+  rank,
+  year,
+  holidays,
+  isAdded,
+  onAdd,
+}: SuggestionCardProps) {
   const { window: w, score, factors } = suggestion;
   const [copied, setCopied] = useState(false);
+  const [showCalendar, setShowCalendar] = useState(false);
+  const months = monthsInRange(w.start, w.end);
 
   async function handleCopy() {
     try {
@@ -91,13 +107,64 @@ export function SuggestionCard({ suggestion, rank }: SuggestionCardProps) {
       {/* Holidays included */}
       {w.holidays.length > 0 && (
         <p className="mt-3 text-xs text-gray-500">
-          🎌 포함 공휴일:{" "}
-          {w.holidays.map((h) => h.nameKo).join(", ")}
+          🎌 포함 공휴일: {w.holidays.map((h) => h.nameKo).join(", ")}
         </p>
       )}
 
-      {/* Actions */}
-      <div className="mt-4 flex gap-2">
+      {/* Calendar preview toggle */}
+      <button
+        type="button"
+        onClick={() => setShowCalendar((v) => !v)}
+        aria-expanded={showCalendar}
+        className="mt-3 flex w-full items-center justify-between border-t border-gray-100 pt-3 text-xs font-medium text-gray-500 transition hover:text-gray-700"
+      >
+        <span>📅 달력에서 보기</span>
+        <span className={`transition-transform ${showCalendar ? "rotate-180" : ""}`}>
+          ⌄
+        </span>
+      </button>
+      {showCalendar && (
+        <div className="mt-3 space-y-2">
+          <CalendarLegend />
+          <div
+            className={`grid gap-3 ${
+              months.length > 1 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1"
+            }`}
+          >
+            {months.map((m) => (
+              <div key={m} className="rounded-xl bg-gray-50 p-3">
+                <MiniCalendar
+                  year={year}
+                  month={m}
+                  holidays={holidays}
+                  vacationRanges={[{ start: w.start, end: w.end }]}
+                  compact
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Score explanation */}
+      <ScoreExplain suggestion={suggestion} />
+
+      {/* Primary action: add to my calendar */}
+      <button
+        type="button"
+        onClick={() => onAdd(suggestion)}
+        disabled={isAdded}
+        className={`mt-4 w-full rounded-lg px-4 py-2.5 text-sm font-semibold transition ${
+          isAdded
+            ? "cursor-default bg-emerald-50 text-emerald-600"
+            : "bg-indigo-600 text-white hover:bg-indigo-700"
+        }`}
+      >
+        {isAdded ? "내 캘린더에 추가됨 ✓" : "＋ 내 캘린더에 추가"}
+      </button>
+
+      {/* Secondary actions */}
+      <div className="mt-2 flex gap-2">
         <button
           type="button"
           onClick={handleCopy}

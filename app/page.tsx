@@ -1,15 +1,19 @@
-// Main page: wires the planner form → ranking algorithm → results.
+// Main page: wires the planner form → ranking algorithm → results + my calendar.
 "use client";
 
-import { useState } from "react";
-import type { Suggestion, User } from "@/lib/types";
+import { useMemo, useState } from "react";
+import type { Plan, Suggestion, User } from "@/lib/types";
 import { getHolidaysForYear, coverageRange } from "@/lib/holidays/korea";
 import { generateCandidates } from "@/lib/candidates";
 import { rankWindows } from "@/lib/rank";
+import { totalDays } from "@/lib/format";
 import { usePlannerStorage } from "@/hooks/usePlannerStorage";
+import { usePlans } from "@/hooks/usePlans";
 import { PlannerForm } from "@/components/PlannerForm";
-import { SuggestionList } from "@/components/SuggestionList";
+import { SuggestionList, suggestionKey } from "@/components/SuggestionList";
 import { EmptyState } from "@/components/EmptyState";
+import { SeasonGuide } from "@/components/SeasonGuide";
+import { MyCalendar } from "@/components/MyCalendar";
 
 type ResultState =
   | { kind: "idle" }
@@ -39,15 +43,56 @@ function computeResult(user: User): ResultState {
 
 export default function Home() {
   const { user, setUser, hydrated } = usePlannerStorage();
+  const { plans, addPlan, removePlan } = usePlans();
   // Result is recomputed fresh on every submit — never shows stale data.
   const [result, setResult] = useState<ResultState>({ kind: "idle" });
+  // Snapshot of the year the current results were computed for.
+  const [activeUser, setActiveUser] = useState<User | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
 
   function handleSubmit(submitted: User) {
     setResult(computeResult(submitted));
+    setActiveUser(submitted);
+    setWarning(null);
+  }
+
+  const activeYear = activeUser?.year ?? user.year;
+  const inCoverage =
+    activeYear >= coverageRange.minYear && activeYear <= coverageRange.maxYear;
+  const activeHolidays = inCoverage ? getHolidaysForYear(activeYear) : [];
+
+  // Plans belonging to the active year (for the "my calendar" summary).
+  const yearPlans = useMemo(
+    () => plans.filter((p) => p.start.startsWith(String(activeYear))),
+    [plans, activeYear]
+  );
+  const usedDays = yearPlans.reduce((sum, p) => sum + p.ptoDays, 0);
+  const totalPto = activeUser?.daysRemaining ?? user.daysRemaining;
+
+  const addedKeys = useMemo(
+    () => new Set(plans.map((p) => `${p.start}|${p.end}`)),
+    [plans]
+  );
+
+  function handleAdd(s: Suggestion) {
+    const plan: Plan = {
+      start: s.window.start,
+      end: s.window.end,
+      ptoDays: s.window.ptoDays,
+      totalDays: totalDays(s.window),
+    };
+    if (usedDays + plan.ptoDays > totalPto) {
+      setWarning(
+        `남은 연차(${totalPto - usedDays}일)보다 많은 연차(${plan.ptoDays}일)가 필요해 추가할 수 없어요.`
+      );
+      return;
+    }
+    setWarning(null);
+    addPlan(plan);
   }
 
   return (
-    <main className="mx-auto min-h-screen max-w-3xl px-4 py-10 sm:px-6">
+    <main className="mx-auto min-h-screen max-w-5xl px-4 py-10 sm:px-6">
       <header className="mb-8 text-center">
         <h1 className="text-3xl font-bold tracking-tight text-gray-900">
           🏖️ 브레이크타임
@@ -58,7 +103,8 @@ export default function Home() {
       </header>
 
       <div className="grid gap-6 md:grid-cols-[minmax(0,340px)_1fr]">
-        <section>
+        {/* Left column: form + season guide + my calendar */}
+        <div className="space-y-6">
           {hydrated ? (
             <PlannerForm
               user={user}
@@ -68,9 +114,35 @@ export default function Home() {
           ) : (
             <div className="h-96 animate-pulse rounded-2xl bg-gray-100" />
           )}
-        </section>
 
-        <section>
+          <SeasonGuide />
+
+          {inCoverage && (
+            <MyCalendar
+              plans={yearPlans}
+              year={activeYear}
+              totalDays={totalPto}
+              holidays={activeHolidays}
+              onRemove={(localIndex) => {
+                // Map the year-filtered index back to the global plans index.
+                const target = yearPlans[localIndex];
+                const globalIndex = plans.findIndex(
+                  (p) => p.start === target.start && p.end === target.end
+                );
+                if (globalIndex >= 0) removePlan(globalIndex);
+              }}
+            />
+          )}
+        </div>
+
+        {/* Right column: results */}
+        <section className="space-y-3">
+          {warning && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+              ⚠️ {warning}
+            </div>
+          )}
+
           {result.kind === "idle" && (
             <EmptyState
               icon="👈"
@@ -79,7 +151,13 @@ export default function Home() {
             />
           )}
           {result.kind === "ok" && (
-            <SuggestionList suggestions={result.suggestions} />
+            <SuggestionList
+              suggestions={result.suggestions}
+              year={activeYear}
+              holidays={activeHolidays}
+              addedKeys={addedKeys}
+              onAdd={handleAdd}
+            />
           )}
           {result.kind === "empty-no-pto" && (
             <EmptyState
